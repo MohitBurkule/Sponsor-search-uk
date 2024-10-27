@@ -6,8 +6,8 @@ import time
 import io
 import folium
 from streamlit_folium import st_folium
-
-
+from urllib.parse import quote  # For URL encoding
+st.set_page_config(layout="wide")
 # Step 1: Scrape the CSV URL from the gov.uk website
 @st.cache_data(show_spinner=False)
 def get_csv_url():
@@ -48,6 +48,13 @@ def load_sponsor_data(csv_content):
     try:
         # Use io.StringIO to convert byte content into an in-memory text stream
         df = pd.read_csv(io.StringIO(csv_content.decode('utf-8')))
+
+        # Add a new column with URL for company search
+        df['Company Info URL'] = df['Organisation Name'].apply(
+            lambda name: f"https://find-and-update.company-information.service.gov.uk/advanced-search/get-results?"
+                         f"companyNameIncludes={quote(name)}"
+        )
+
         return df
     except Exception as e:
         st.error(f"Error loading CSV: {e}")
@@ -56,9 +63,8 @@ def load_sponsor_data(csv_content):
 
 # Step 4: Plot UK map with sponsors
 def plot_map(data):
-
-    #write comming soon in syle, center and color center align
-    text= """
+    # Placeholder content: Feature in development
+    text = """
     <div style=" padding: 10px; border-radius: 10px;">
     <h3 style="color: #ff6347; text-align: center;"
     >Coming Soon...</h3>
@@ -86,6 +92,37 @@ def plot_map(data):
 
     return uk_map
 
+def get_company_link(company_info_url, company_name):
+    """
+    Scrapes the provided company information URL for the exact company name
+    and returns the corresponding link if found.
+
+    :param company_info_url: The URL to scrape for company information.
+    :param company_name: The name of the company to search for.
+    :return: The link to the company's information if found; otherwise, None.
+    """
+    base_url="https://find-and-update.company-information.service.gov.uk/"
+    try:
+        # Send a request to the company info URL
+        response = requests.get(company_info_url)
+        response.raise_for_status()  # Raise an error for bad responses
+        soup = BeautifulSoup(response.content, "html.parser")
+        text_to_search = company_name.lower()
+        #strip all white spaces
+        text_to_search = text_to_search.replace(" ", "")
+        # st.write(f"Searching for: {text_to_search}")
+        # Search for company name in the results
+        for link in soup.find_all("a"):
+            #st.write(link.text.lower().replace(" ", "").replace("(linkopensanewwindow)","").replace("(opensinnewtab)",""))
+
+            if text_to_search==link.text.lower().replace(" ", "").replace("(linkopensanewwindow)","").replace("(opensinnewtab)",""):
+                return base_url+link.get("href")
+                # Return the URL of the found company
+
+    except Exception as e:
+        print(f"Error scraping company link: {e}")
+
+    return None  # Return None if the company name is not found
 
 # Step 5: Set up Streamlit app
 def main():
@@ -106,7 +143,12 @@ def main():
 
             if df is not None:
                 # Set table display size slightly bigger
-                st.markdown("<style> .dataframe { font-size: 14px; } </style>", unsafe_allow_html=True)
+                # st.markdown(
+                #     """
+                #     <style>
+                #     .dataframe { font-size: 16px !important; }
+                #     </style>
+                #     """, unsafe_allow_html=True)
 
                 # Step 6: Search bar and filtering
                 st.sidebar.header("Search Filters")
@@ -149,8 +191,38 @@ def main():
                         filtered_df[column_2].astype(str).str.contains(search_value_2, case=False, na=False)]
 
                 # Display the filtered dataframe
-                st.dataframe(filtered_df)
+                # st.dataframe(filtered_df,width=2600, height=500,use_container_width=False)
+                # filtered_df['Company Info URL'] = filtered_df['Company Info URL'].apply(
+                #     lambda url: f'<a href="{url}" target="_blank">Company Info</a>')
+                # st.write(filtered_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+                 # Use the st.dataframe with on_select set to "rerun"
+                selected_row_data = st.dataframe(filtered_df, use_container_width=True, on_select="rerun")#,selection_mode="single-row")
 
+                if selected_row_data['selection']['rows']:  # Check if a row is selected
+                    if len(selected_row_data['selection']['rows']) >20:
+                        st.warning("Company search is limited to 20 companies at a time. Please select fewer companies.")
+                        #limit the number of selected companies to 20
+                        selected_row_data['selection']['rows'] = selected_row_data['selection']['rows'][:20]
+                    st.write("Selected Companies: (red color indicates the link is not found)")
+                    for i in selected_row_data['selection']['rows']:
+                        # Get the selected row's Organisation Name from the returned dictionary
+                        row_num = selected_row_data['selection']['rows'][i]
+                        selected_organisation=filtered_df.iloc[row_num]['Organisation Name']
+                        #url encode the selected organisation name
+                        url_selected_organisation = quote(selected_organisation)
+                        company_info_url = f"https://find-and-update.company-information.service.gov.uk/advanced-search/get-results?companyNameIncludes={url_selected_organisation}&status=active"
+                        company_actual_url=get_company_link(company_info_url, selected_organisation)
+                        # Use Streamlit's markdown to open the URL in a new tab
+                        # js = f"window.open('{company_info_url}');alert('Opening Company Info in a new tab...');"
+                        # st.markdown(f'<script>{js}</script>', unsafe_allow_html=True)
+                        #make a button with the link , button text should be the company name
+                        if company_actual_url:
+                            st.write(f" [{selected_organisation}]({company_actual_url})")
+                        else:
+                            #make it different color if the link is not found
+                            #st.write(f" [{selected_organisation}]({company_info_url})")
+                            #use html
+                            st.write(f"<a href='{company_info_url}' style='color:red;'>{selected_organisation}</a>", unsafe_allow_html=True)
                 # Show map with sponsors per city
                 st.header("Sponsor Locations on UK Map")
                 sponsor_map = plot_map(filtered_df)
