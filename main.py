@@ -133,7 +133,7 @@ def main():
     if csv_info:
         csv_url, cache_time = csv_info
         st.write(f"CSV URL: {csv_url} (Downloaded at: {cache_time})")
-
+        st.write("Select companies below to view their company information.")
         # Download the CSV file content
         csv_content = download_csv_file(csv_url)
 
@@ -204,10 +204,10 @@ def main():
                         #limit the number of selected companies to 20
                         selected_row_data['selection']['rows'] = selected_row_data['selection']['rows'][:20]
                     st.write("Selected Companies: (red color indicates the link is not found)")
+                    # st.write(selected_row_data['selection']['rows'])
                     for i in selected_row_data['selection']['rows']:
                         # Get the selected row's Organisation Name from the returned dictionary
-                        row_num = selected_row_data['selection']['rows'][i]
-                        selected_organisation=filtered_df.iloc[row_num]['Organisation Name']
+                        selected_organisation=filtered_df.iloc[i]['Organisation Name']
                         #url encode the selected organisation name
                         url_selected_organisation = quote(selected_organisation)
                         company_info_url = f"https://find-and-update.company-information.service.gov.uk/advanced-search/get-results?companyNameIncludes={url_selected_organisation}&status=active"
