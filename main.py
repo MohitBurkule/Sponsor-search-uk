@@ -92,6 +92,36 @@ def plot_map(data):
 
     return uk_map
 
+
+def get_sic_codes(company_info_url):
+    """
+    Scrapes the provided company information URL for SIC codes
+    (spans with IDs sic0 to sic10).
+
+    :param company_info_url: The URL to scrape for company SIC codes.
+    :return: A dictionary containing the SIC codes if found; otherwise, an empty dictionary.
+    """
+    sic_codes = {}
+
+    try:
+        # Send a request to the company info URL
+        response = requests.get(company_info_url)
+        response.raise_for_status()  # Raise an error for bad responses
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        # Loop through sic0 to sic10
+        for i in range(11):
+            sic_id = f'sic{i}'
+            span = soup.find('span', id=sic_id)
+            if span:
+                sic_codes[sic_id] = span.text.strip()  # Add to dictionary with the ID as the key
+
+    except Exception as e:
+        print(f"Error scraping SIC codes: {e}")
+
+    return sic_codes  # Return the dictionary of SIC codes
+
+
 def get_company_link(company_info_url, company_name):
     """
     Scrapes the provided company information URL for the exact company name
@@ -218,6 +248,11 @@ def main():
                         #make a button with the link , button text should be the company name
                         if company_actual_url:
                             st.write(f" [{selected_organisation}]({company_actual_url})")
+                            sic_codes = get_sic_codes(company_actual_url)
+                            if sic_codes:
+                                st.write(f"Activities for {selected_organisation}")
+                                for sic_id, code in sic_codes.items():
+                                    st.write(f" {code}")
                         else:
                             #make it different color if the link is not found
                             #st.write(f" [{selected_organisation}]({company_info_url})")
