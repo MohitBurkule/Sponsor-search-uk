@@ -7,7 +7,11 @@ import io
 import folium
 from streamlit_folium import st_folium
 from urllib.parse import quote  # For URL encoding
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide",
+                   page_title="UK sponsor search",
+                    page_icon=":uk:",
+)
+
 # Step 1: Scrape the CSV URL from the gov.uk website
 @st.cache_data(show_spinner=False)
 def get_csv_url():
