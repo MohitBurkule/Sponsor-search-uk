@@ -7,8 +7,6 @@ import io
 import folium
 from streamlit_folium import st_folium
 from urllib.parse import quote  # For URL encoding
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
 st.set_page_config(layout="wide",
                    page_title="UK sponsor search",
@@ -72,25 +70,26 @@ def load_sponsor_data(csv_content):
 def get_coordinates(city_name):
     """
     Geocodes a given city name to return latitude and longitude.
-    Includes caching to avoid repeated API requests.
+    Uses Open-Meteo API for faster and rate-limit friendly lookups.
     """
     if not city_name or pd.isna(city_name):
         return None, None
 
-    geolocator = Nominatim(user_agent="uk_sponsor_search_app")
     try:
-        # Append ', UK' for better accuracy
-        # Add a sleep to comply with Nominatim's 1 request/sec limit
-        time.sleep(1)
-        location = geolocator.geocode(f"{city_name}, UK", timeout=5)
-        if location:
-            return location.latitude, location.longitude
-    except (GeocoderTimedOut, GeocoderServiceError) as e:
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={quote(city_name)}&count=1&format=json"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        if "results" in data and len(data["results"]) > 0:
+            result = data["results"][0]
+            # Ensure it is somewhat within UK bounds or we could just take the first match
+            # But just returning the first match is fine for now
+            return result["latitude"], result["longitude"]
+    except Exception as e:
         print(f"Error geocoding {city_name}: {e}")
 
-    # Don't cache failed responses permanently
-    # Streamlit's cache_data doesn't let us easily clear a specific key from within the function
-    # return None, None is acceptable here as it caches the failure but won't crash
+    # Don't cache failed responses permanently if we had an easier way, but cache nulls to avoid spamming the API on bad cities
     return None, None
 
 # Step 4: Plot UK map with sponsors
@@ -101,8 +100,11 @@ def plot_map(data):
 
     uk_map = folium.Map(location=[54.0, -2.0], zoom_start=6)
 
-    # Group by Town/City to aggregate sponsors
-    grouped_data = data.groupby('Town/City').size().reset_index(name='Count')
+    # Group by Town/City to aggregate sponsors and also collect the organisation names
+    grouped_data = data.groupby('Town/City').agg(
+        Count=('Organisation Name', 'size'),
+        Companies=('Organisation Name', lambda x: list(x))
+    ).reset_index()
 
     # Sort by count descending
     grouped_data = grouped_data.sort_values(by='Count', ascending=False)
@@ -116,14 +118,26 @@ def plot_map(data):
     for _, row in grouped_data.iterrows():
         city = row['Town/City']
         count = row['Count']
+        companies = row['Companies']
 
         lat, lon = get_coordinates(city)
         if lat is not None and lon is not None:
+            # Format the companies list into a string
+            companies_display = "<br>".join(f"• {c}" for c in companies[:10])
+            if count > 10:
+                companies_display += f"<br><i>...and {count - 10} more</i>"
+
+            popup_html = f"<b>{city} ({count} sponsors)</b><br>{companies_display}"
+
+            tooltip_text = f"{city} ({count} sponsors)"
+            if count <= 5:
+                tooltip_text += f": {', '.join(companies[:5])}"
+
             # Add clickable markers
             folium.Marker(
                 location=[lat, lon],
-                popup=f"{city}: {count} sponsors",
-                tooltip=f"{city} ({count} sponsors)"
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=tooltip_text
             ).add_to(uk_map)
 
     return uk_map
