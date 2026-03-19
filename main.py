@@ -7,6 +7,9 @@ import io
 import folium
 from streamlit_folium import st_folium
 from urllib.parse import quote  # For URL encoding
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+
 st.set_page_config(layout="wide",
                    page_title="UK sponsor search",
                     page_icon=":uk:",
@@ -65,34 +68,63 @@ def load_sponsor_data(csv_content):
         return None
 
 
+@st.cache_data(show_spinner=False)
+def get_coordinates(city_name):
+    """
+    Geocodes a given city name to return latitude and longitude.
+    Includes caching to avoid repeated API requests.
+    """
+    if not city_name or pd.isna(city_name):
+        return None, None
+
+    geolocator = Nominatim(user_agent="uk_sponsor_search_app")
+    try:
+        # Append ', UK' for better accuracy
+        # Add a sleep to comply with Nominatim's 1 request/sec limit
+        time.sleep(1)
+        location = geolocator.geocode(f"{city_name}, UK", timeout=5)
+        if location:
+            return location.latitude, location.longitude
+    except (GeocoderTimedOut, GeocoderServiceError) as e:
+        print(f"Error geocoding {city_name}: {e}")
+
+    # Don't cache failed responses permanently
+    # Streamlit's cache_data doesn't let us easily clear a specific key from within the function
+    # return None, None is acceptable here as it caches the failure but won't crash
+    return None, None
+
 # Step 4: Plot UK map with sponsors
 def plot_map(data):
-    # Placeholder content: Feature in development
-    text = """
-    <div style=" padding: 10px; border-radius: 10px;">
-    <h3 style="color: #ff6347; text-align: center;"
-    >Coming Soon...</h3>
-    <p style="color: #000000;">This feature is under development.</p>
-    </div>
-    """
-    st.write(text, unsafe_allow_html=True)
+    if data is None or data.empty:
+        st.warning("No data available to plot on the map.")
+        return None
 
-    return
     uk_map = folium.Map(location=[54.0, -2.0], zoom_start=6)
 
     # Group by Town/City to aggregate sponsors
     grouped_data = data.groupby('Town/City').size().reset_index(name='Count')
 
-    for i, row in grouped_data.iterrows():
+    # Sort by count descending
+    grouped_data = grouped_data.sort_values(by='Count', ascending=False)
+
+    # If there are many cities, limit to top 50 to avoid rate limits
+    if len(grouped_data) > 50:
+        st.info("Showing map for the top 50 cities. Use filters to narrow down the results.")
+        grouped_data = grouped_data.head(50)
+
+    # Fetch coordinates and plot markers
+    for _, row in grouped_data.iterrows():
         city = row['Town/City']
         count = row['Count']
 
-        # Add clickable markers
-        folium.Marker(
-            location=[row['latitude'], row['longitude']],  # Placeholder for actual lat/long
-            popup=f"{city}: {count} sponsors",
-            tooltip=f"{city} ({count} sponsors)"
-        ).add_to(uk_map)
+        lat, lon = get_coordinates(city)
+        if lat is not None and lon is not None:
+            # Add clickable markers
+            folium.Marker(
+                location=[lat, lon],
+                popup=f"{city}: {count} sponsors",
+                tooltip=f"{city} ({count} sponsors)"
+            ).add_to(uk_map)
 
     return uk_map
 
@@ -265,7 +297,8 @@ def main():
                 # Show map with sponsors per city
                 st.header("Sponsor Locations on UK Map")
                 sponsor_map = plot_map(filtered_df)
-                # st_folium(sponsor_map, width=700, height=500)
+                if sponsor_map:
+                    st_folium(sponsor_map, width=700, height=500)
 
         else:
             st.error("Could not download the CSV file.")
