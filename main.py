@@ -17,7 +17,7 @@ st.set_page_config(layout="wide",
 @st.cache_data(show_spinner=False)
 def get_csv_url():
     url = "https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
     soup = BeautifulSoup(response.content, "html.parser")
 
     # Look for the CSV download link
@@ -34,7 +34,7 @@ def download_csv_file(csv_url, retries=5, delay=2):
     while attempt < retries:
         try:
             # Try to download the CSV file
-            response = requests.get(csv_url)
+            response = requests.get(csv_url, timeout=10)
             response.raise_for_status()  # Check for HTTP errors
             return response.content
         except Exception as e:
@@ -155,7 +155,7 @@ def get_sic_codes(company_info_url):
 
     try:
         # Send a request to the company info URL
-        response = requests.get(company_info_url)
+        response = requests.get(company_info_url, timeout=10)
         response.raise_for_status()  # Raise an error for bad responses
         soup = BeautifulSoup(response.content, "html.parser")
 
@@ -184,7 +184,7 @@ def get_company_link(company_info_url, company_name):
     base_url="https://find-and-update.company-information.service.gov.uk/"
     try:
         # Send a request to the company info URL
-        response = requests.get(company_info_url)
+        response = requests.get(company_info_url, timeout=10)
         response.raise_for_status()  # Raise an error for bad responses
         soup = BeautifulSoup(response.content, "html.parser")
         text_to_search = company_name.lower()
