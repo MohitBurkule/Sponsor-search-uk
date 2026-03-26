@@ -59,8 +59,8 @@ class TestSecurityFix(unittest.TestCase):
         main.requests.get.return_value.content = b'<html></html>'
         main.requests.get.return_value.raise_for_status = MagicMock()
         with patch('main.BeautifulSoup') as mock_bs:
-            main.get_company_link("http://example.com/search", "Company Name")
-            main.requests.get.assert_called_with("http://example.com/search", timeout=10)
+            main.get_company_link("Company Name")
+            main.requests.get.assert_called_with("https://find-and-update.company-information.service.gov.uk/search/companies?q=Company%20Name", timeout=10)
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,6 +7,7 @@ import io
 import folium
 from streamlit_folium import st_folium
 from urllib.parse import quote  # For URL encoding
+import re
 
 st.set_page_config(layout="wide",
                    page_title="UK sponsor search",
@@ -238,30 +239,63 @@ def get_sic_codes(company_info_url):
     return sic_codes  # Return the dictionary of SIC codes
 
 
-def get_company_link(company_info_url, company_name):
+def get_company_link(company_name):
     """
     Scrapes the provided company information URL for the exact company name
     and returns the corresponding link if found.
 
-    :param company_info_url: The URL to scrape for company information.
     :param company_name: The name of the company to search for.
     :return: The link to the company's information if found; otherwise, None.
     """
-    base_url="https://find-and-update.company-information.service.gov.uk/"
+    base_url = "https://find-and-update.company-information.service.gov.uk"
+    # We use the search endpoint instead of the advanced search to get better results
+    search_url = f"https://find-and-update.company-information.service.gov.uk/search/companies?q={quote(company_name)}"
+
+    def normalize_name(name):
+        name = name.lower()
+        name = re.sub(r'[^\w\s]', '', name)
+        name = re.sub(r'\s+', '', name)
+        return name
+
     try:
-        # Send a request to the company info URL
-        response = requests.get(company_info_url, timeout=10)
+        response = requests.get(search_url, timeout=10)
         response.raise_for_status()  # Raise an error for bad responses
         soup = BeautifulSoup(response.content, "html.parser")
-        text_to_search = company_name.lower()
-        #strip all white spaces
-        text_to_search = text_to_search.replace(" ", "")
-        # Search for company name in the results
-        for link in soup.find_all("a"):
 
-            if text_to_search==link.text.lower().replace(" ", "").replace("(linkopensanewwindow)","").replace("(opensinnewtab)",""):
-                return base_url+link.get("href")
-                # Return the URL of the found company
+        text_to_search = normalize_name(company_name)
+        text_to_search_ltd = text_to_search.replace("limited", "ltd")
+        text_to_search_limited = text_to_search.replace("ltd", "limited")
+
+        # 1. Try exact match
+        for link in soup.find_all("a"):
+            href = link.get("href", "")
+            if href.startswith("/company/"):
+                link_text = link.text.strip()
+                link_text_norm = normalize_name(link_text)
+
+                link_text_norm_ltd = link_text_norm.replace("limited", "ltd")
+                link_text_norm_limited = link_text_norm.replace("ltd", "limited")
+
+                if text_to_search_ltd == link_text_norm_ltd or text_to_search_limited == link_text_norm_limited:
+                    return base_url + href
+
+        # 2. Try prefix match
+        for link in soup.find_all("a"):
+            href = link.get("href", "")
+            if href.startswith("/company/"):
+                link_text = link.text.strip()
+                link_text_norm = normalize_name(link_text)
+
+                link_text_norm_ltd = link_text_norm.replace("limited", "ltd")
+
+                if link_text_norm_ltd.startswith(text_to_search_ltd) or text_to_search_ltd.startswith(link_text_norm_ltd):
+                    return base_url + href
+
+        # 3. Just return the first company result
+        for link in soup.find_all("a"):
+            href = link.get("href", "")
+            if href.startswith("/company/"):
+                return base_url + href
 
     except Exception as e:
         print(f"Error scraping company link: {e}")
@@ -351,7 +385,7 @@ def main():
                         #url encode the selected organisation name
                         url_selected_organisation = quote(selected_organisation)
                         company_info_url = f"https://find-and-update.company-information.service.gov.uk/advanced-search/get-results?companyNameIncludes={url_selected_organisation}&status=active"
-                        company_actual_url=get_company_link(company_info_url, selected_organisation)
+                        company_actual_url=get_company_link(selected_organisation)
                         #make a button with the link , button text should be the company name
                         if company_actual_url:
                             st.write(f" [{selected_organisation}]({company_actual_url})")
