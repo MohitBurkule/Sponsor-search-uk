@@ -262,8 +262,17 @@ def main():
                         filtered_df[column_2].astype(str).str.contains(search_value_2, case=False, na=False)]
 
                 # Display the filtered dataframe
+                # Show the total number of companies
+                st.write(f"Total number of companies: {len(filtered_df)}")
                 # Use the st.dataframe with on_select set to "rerun"
-                selected_row_data = st.dataframe(filtered_df, use_container_width=True, on_select="rerun")
+                selected_row_data = st.dataframe(
+                    filtered_df,
+                    use_container_width=True,
+                    on_select="rerun",
+                    column_config={
+                        "Company Info URL": st.column_config.LinkColumn("Company Info URL")
+                    }
+                )
 
                 if selected_row_data['selection']['rows']:  # Check if a row is selected
                     if len(selected_row_data['selection']['rows']) >20:
