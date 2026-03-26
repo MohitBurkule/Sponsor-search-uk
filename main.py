@@ -144,6 +144,71 @@ def plot_map(data):
 
 
 @st.cache_data(show_spinner=False)
+def get_company_info(company_actual_url):
+    """
+    Scrapes the provided company actual URL for key company information.
+
+    :param company_actual_url: The URL to scrape for company information.
+    :return: A dictionary containing the company information if found; otherwise, None.
+    """
+    info = {}
+    try:
+        response = requests.get(company_actual_url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        def get_text_or_na(element):
+            return element.text.strip() if element else 'N/A'
+
+        number_element = soup.find('p', id='company-number')
+        if number_element:
+            number_strong = number_element.find('strong')
+            if number_strong:
+                info['Company number'] = number_strong.text.strip()
+            else:
+                info['Company number'] = number_element.text.replace('Company number', '').strip()
+
+        # Address
+        address_element = soup.find('dd', class_='text data')
+        if address_element:
+            info['Registered office address'] = get_text_or_na(address_element)
+
+        # Company status
+        status_element = soup.find('dd', class_='text data', id='company-status')
+        if not status_element:
+            dts = soup.find_all('dt')
+            for dt in dts:
+                if 'Company status' in dt.text:
+                    status_element = dt.find_next_sibling('dd')
+        if status_element:
+            info['Company status'] = get_text_or_na(status_element)
+
+        # Company type
+        type_element = soup.find('dd', class_='text data', id='company-type')
+        if not type_element:
+            dts = soup.find_all('dt')
+            for dt in dts:
+                if 'Company type' in dt.text:
+                    type_element = dt.find_next_sibling('dd')
+        if type_element:
+            info['Company type'] = get_text_or_na(type_element)
+
+        # Incorporated on
+        inc_element = soup.find('dd', class_='text data', id='company-creation-date')
+        if not inc_element:
+            dts = soup.find_all('dt')
+            for dt in dts:
+                if 'Incorporated on' in dt.text:
+                    inc_element = dt.find_next_sibling('dd')
+        if inc_element:
+            info['Incorporated on'] = get_text_or_na(inc_element)
+
+        return info
+    except Exception as e:
+        print(f"Error extracting company info: {e}")
+        return None
+
+@st.cache_data(show_spinner=False)
 def get_sic_codes(company_info_url):
     """
     Scrapes the provided company information URL for SIC codes
@@ -290,6 +355,13 @@ def main():
                         #make a button with the link , button text should be the company name
                         if company_actual_url:
                             st.write(f" [{selected_organisation}]({company_actual_url})")
+
+                            company_info = get_company_info(company_actual_url)
+                            if company_info:
+                                st.write(f"**Company Info for {selected_organisation}**")
+                                for key, value in company_info.items():
+                                    st.write(f"**{key}:** {value}")
+
                             sic_codes = get_sic_codes(company_actual_url)
                             if sic_codes:
                                 st.write(f"Activities for {selected_organisation}")
