@@ -143,6 +143,7 @@ def plot_map(data):
     return uk_map
 
 
+@st.cache_data(show_spinner=False)
 def get_sic_codes(company_info_url):
     """
     Scrapes the provided company information URL for SIC codes
